@@ -46,7 +46,7 @@ class RandomizationWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
 
-        new_mass = ... #TODO: sample new mass
+        new_mass = self._sample_mass()
 
         if new_mass is not None:
 

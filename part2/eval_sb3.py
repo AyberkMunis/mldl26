@@ -3,7 +3,7 @@ import os
 
 import gymnasium as gym
 import numpy as np
-#from stable_baselines3 import 
+from stable_baselines3 import PPO
 import panda_gym  # noqa: F401 - required so Panda envs are registered
 
 
@@ -16,7 +16,7 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     render_mode = "human" if render else "rgb_array"
     env = gym.make("PandaPush-v3", render_mode=render_mode, type=env_type, reward_type="dense")
-    #TODO: load model here
+    model = PPO.load(model_path)
 
     episode_returns = []
     successes = []
@@ -28,7 +28,7 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
         episode_return = 0.0
 
         while not (terminated or truncated):
-            action,_ = ... #TODO: get action from the model
+            action, _ = model.predict(obs, deterministic=deterministic)
             obs, reward, terminated, truncated, info = env.step(action)
             episode_return += float(reward)
 

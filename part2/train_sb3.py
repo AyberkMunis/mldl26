@@ -5,6 +5,7 @@ import gymnasium as gym
 import numpy as np
 import panda_gym  # type: ignore[import-not-found]
 from stable_baselines3 import DDPG
+from stable_baselines3 import PPO
 from rand_wrapper import RandomizationWrapper
 
 
@@ -43,10 +44,13 @@ def main() -> None:
         reward_type="dense",
     )
 
-    #TODO: add randomization wrapper here
-    #TODO: create model and train it
-    save_name = f"sac_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
-    # TODO: model.save(save_name)
+    env = RandomizationWrapper(env, mass_range=(0.5, 2.0), mode=args.sampling_strategy)
+
+    model = PPO("MultiInputPolicy", env, verbose=1)
+    model.learn(total_timesteps=args.timesteps)
+
+    save_name = f"ppo_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
+    model.save(save_name)
 
 
 if __name__ == "__main__":
