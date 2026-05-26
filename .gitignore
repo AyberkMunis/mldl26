@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Training outputs
+checkpoints/
+wandb/
+runs/
+logs/
+
+# Model files
+*.pt
+*.pth
+*.zip
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Jupyter / Colab
+.ipynb_checkpoints/
