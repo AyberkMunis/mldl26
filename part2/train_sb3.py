@@ -4,7 +4,7 @@ from collections import deque
 import gymnasium as gym
 import numpy as np
 import panda_gym  # type: ignore[import-not-found]
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO, SAC, DDPG
 from rand_wrapper import RandomizationWrapper
 
 

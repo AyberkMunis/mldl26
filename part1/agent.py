@@ -38,6 +38,9 @@ class Policy(torch.nn.Module):
             Critic network
         """
         # TASK 3: critic network for actor-critic algorithm
+        self.fc1_critic = torch.nn.Linear(state_space, self.hidden)
+        self.fc2_critic = torch.nn.Linear(self.hidden, self.hidden)
+        self.fc3_critic_value = torch.nn.Linear(self.hidden, 1)
 
 
         self.init_weights()
@@ -70,14 +73,25 @@ class Policy(torch.nn.Module):
         
         return normal_dist
 
+    def value(self, x):
+        """
+        Critic forward pass: estimates V(s)
+        """
+        x_critic = self.tanh(self.fc1_critic(x))
+        x_critic = self.tanh(self.fc2_critic(x_critic))
+        state_value = self.fc3_critic_value(x_critic).squeeze(-1)
+        return state_value
+
 
 class Agent(object):
-    def __init__(self, policy, device='cpu'):
+    def __init__(self, policy, device='cpu', algo='reinforce', baseline=0.0, gamma=0.99, lr=1e-4):
         self.train_device = device
         self.policy = policy.to(self.train_device)
-        self.optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        self.optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
 
-        self.gamma = 0.99
+        self.algo = algo
+        self.baseline = baseline
+        self.gamma = gamma
         self.states = []
         self.next_states = []
         self.action_log_probs = []
@@ -108,7 +122,51 @@ class Agent(object):
         #   - compute advantage terms
         #   - compute actor loss and critic loss
         #   - compute gradients and step the optimizer
-        #
+        if self.algo == 'reinforce':
+            # REINFORCE without baseline
+            returns = discount_rewards(rewards, self.gamma)
+
+            # Normalizing returns improves numerical stability
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+            policy_loss = -(action_log_probs * returns.detach()).mean()
+            loss = policy_loss
+
+        elif self.algo == 'reinforce_baseline':
+            # REINFORCE with constant baseline
+            returns = discount_rewards(rewards, self.gamma)
+
+            # Constant baseline: A_t = G_t - b
+            advantages = returns - self.baseline
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+            policy_loss = -(action_log_probs * advantages.detach()).mean()
+            loss = policy_loss
+
+        elif self.algo == 'actor_critic':
+            # Actor-Critic with one-step TD error
+            values = self.policy.value(states)
+
+            with torch.no_grad():
+                next_values = self.policy.value(next_states)
+                td_target = rewards + self.gamma * next_values * (1.0 - done)
+
+            td_error = td_target - values
+
+            actor_loss = -(action_log_probs * td_error.detach()).mean()
+            critic_loss = td_error.pow(2).mean()
+
+            loss = actor_loss + 0.5 * critic_loss
+
+        else:
+            raise ValueError(f"Unknown algorithm: {self.algo}")
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
+        self.optimizer.step()
+
+        return loss.item()
 
         return        
 
@@ -120,13 +178,15 @@ class Agent(object):
         normal_dist = self.policy(x)
 
         if evaluation:  # Return mean
-            return normal_dist.mean, None
+            action= torch.clamp(normal_dist.mean, -1.0,1.0)
+            return action, None
 
         else:   # Sample from the distribution
             action = normal_dist.sample()
 
             # Compute Log probability of the action [ log(p(a[0] AND a[1] AND a[2])) = log(p(a[0])*p(a[1])*p(a[2])) = log(p(a[0])) + log(p(a[1])) + log(p(a[2])) ]
             action_log_prob = normal_dist.log_prob(action).sum()
+            action=torch.clamp(action,-1,1)
 
             return action, action_log_prob
 
