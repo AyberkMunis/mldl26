@@ -4,12 +4,19 @@ from collections import deque
 import gymnasium as gym
 import numpy as np
 import panda_gym  # type: ignore[import-not-found]
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from rand_wrapper import RandomizationWrapper
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train SAC on PandaPush-v3")
+    parser = argparse.ArgumentParser(description="Train PPO or SAC on PandaPush-v3")
+    parser.add_argument(
+        "--algo",
+        type=str,
+        default="ppo",
+        choices=["ppo", "sac"],
+        help="RL algorithm to use (ppo or sac)",
+    )
     parser.add_argument(
         "--sampling-strategy",
         type=str,
@@ -30,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         default=500_000,
         help="Number of training timesteps",
     )
+    parser.add_argument(
+        "--log-interval",
+        type=int,
+        default=20,
+        help="Log interval for stable-baselines3 training (default: 20)",
+    )
     return parser.parse_args()
 
 
@@ -43,13 +56,22 @@ def main() -> None:
         reward_type="dense",
     )
 
-    env = RandomizationWrapper(env, mass_range=(0.5, 2.0), mode=args.sampling_strategy)
+    # Use a wider range (0.5, 6.0) that encloses the target mass (5.0 kg)
+    env = RandomizationWrapper(env, mass_range=(0.5, 6.0), mode=args.sampling_strategy)
 
-    model = PPO("MultiInputPolicy", env, verbose=1)
-    model.learn(total_timesteps=args.timesteps)
+    if args.algo == "ppo":
+        model = PPO("MultiInputPolicy", env, verbose=1)
+    elif args.algo == "sac":
+        model = SAC("MultiInputPolicy", env, verbose=1)
+    else:
+        raise ValueError(f"Unknown algorithm: {args.algo}")
 
-    save_name = f"ppo_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
+    model.learn(total_timesteps=args.timesteps, log_interval=args.log_interval)
+
+    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
     model.save(save_name)
+    print(f"Model saved successfully as {save_name}.zip")
+
 
 
 if __name__ == "__main__":
