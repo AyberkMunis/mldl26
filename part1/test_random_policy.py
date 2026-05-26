@@ -20,6 +20,15 @@ def main():
     print('State space:', env.observation_space)  # state-space
     print('Action space:', env.action_space)  # action-space
 
+    model = env.unwrapped.model
+
+    print("\n--- MuJoCo model info ---")
+    print("Body names:", [model.body(i).name for i in range(model.nbody)])
+    print("Body masses:", model.body_mass)
+    print("Number of DoFs:", model.nv)
+    print("DoFs per body:", model.body_dofnum)
+    print("Number of actuators:", model.nu)
+
     n_episodes = 50
 
     for ep in range(n_episodes):  
