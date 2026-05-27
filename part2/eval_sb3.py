@@ -1,9 +1,13 @@
 import argparse
 import os
+import random
 
 import gymnasium as gym
 import numpy as np
+import torch
 import panda_gym  # noqa: F401 - required so Panda envs are registered
+
+SEED = 42
 
 
 def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool, env_type: str, algo: str) -> None:
@@ -13,8 +17,13 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
             "Make sure you saved your trained model with model.save(...)."
         )
 
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+
     render_mode = "human" if render else "rgb_array"
     env = gym.make("PandaPush-v3", render_mode=render_mode, type=env_type, reward_type="dense")
+    env.reset(seed=SEED)
     
     if algo == "ppo":
         from stable_baselines3 import PPO
@@ -27,24 +36,39 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     episode_returns = []
     successes = []
+    successful_steps = []
 
     for episode in range(1, n_episodes + 1):
         obs, info = env.reset()
         terminated = False
         truncated = False
         episode_return = 0.0
+        step_count = 0
 
         while not (terminated or truncated):
             action, _ = model.predict(obs, deterministic=deterministic)
             obs, reward, terminated, truncated, info = env.step(action)
             episode_return += float(reward)
+            step_count += 1
+            if render:
+                import time
+                time.sleep(0.05)  # Slow down the visualization to calmly observe robot dynamics
+
 
         episode_returns.append(episode_return)
 
+        is_success = False
         if isinstance(info, dict) and "is_success" in info:
-            successes.append(float(info["is_success"]))
+            is_success = bool(info["is_success"])
+            successes.append(float(is_success))
 
-        print(f"Episode {episode:03d} | return = {episode_return:.3f}")
+        if is_success:
+            successful_steps.append(step_count)
+            status_str = f"SUCCESS (in {step_count} steps)"
+        else:
+            status_str = f"FAILED (limit {step_count} steps)"
+
+        print(f"Episode {episode:03d} | return = {episode_return:.3f} | Result: {status_str}")
 
     env.close()
 
@@ -58,7 +82,11 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     if successes:
         success_rate = float(np.mean(successes))
-        print(f"Success rate: {success_rate:.2%}")
+        print(f"Success rate (Accuracy): {success_rate:.2%}")
+
+    if successful_steps:
+        print(f"Average steps to success: {np.mean(successful_steps):.1f} steps")
+
 
 
 def parse_args() -> argparse.Namespace:
