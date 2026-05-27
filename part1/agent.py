@@ -4,10 +4,12 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 
-def discount_rewards(r, gamma):
+def discount_rewards(r, gamma, done):
     discounted_r = torch.zeros_like(r)
     running_add = 0
     for t in reversed(range(0, r.size(-1))):
+        if done[t]:
+            running_add = 0
         running_add = running_add * gamma + r[t]
         discounted_r[t] = running_add
     return discounted_r
@@ -18,7 +20,7 @@ class Policy(torch.nn.Module):
         super().__init__()
         self.state_space = state_space
         self.action_space = action_space
-        self.hidden = 64
+        self.hidden = 256
         self.tanh = torch.nn.Tanh()
 
         """
@@ -29,9 +31,7 @@ class Policy(torch.nn.Module):
         self.fc3_actor_mean = torch.nn.Linear(self.hidden, action_space)
         
         # Learned standard deviation for exploration at training time 
-        self.sigma_activation = F.softplus
-        init_sigma = 0.5
-        self.sigma = torch.nn.Parameter(torch.zeros(self.action_space)+init_sigma)
+        self.log_std = torch.nn.Parameter(torch.zeros(self.action_space))
 
 
         """
@@ -49,7 +49,7 @@ class Policy(torch.nn.Module):
     def init_weights(self):
         for m in self.modules():
             if type(m) is torch.nn.Linear:
-                torch.nn.init.normal_(m.weight)
+                torch.nn.init.orthogonal_(m.weight, gain=np.sqrt(2))
                 torch.nn.init.zeros_(m.bias)
 
 
@@ -59,9 +59,10 @@ class Policy(torch.nn.Module):
         """
         x_actor = self.tanh(self.fc1_actor(x))
         x_actor = self.tanh(self.fc2_actor(x_actor))
-        action_mean = self.fc3_actor_mean(x_actor)
+        action_mean = self.tanh(self.fc3_actor_mean(x_actor))
 
-        sigma = self.sigma_activation(self.sigma)
+        log_std = torch.clamp(self.log_std, -5, 1)
+        sigma = log_std.exp()
         normal_dist = Normal(action_mean, sigma)
 
 
@@ -87,7 +88,14 @@ class Agent(object):
     def __init__(self, policy, device='cpu', algo='reinforce', baseline=0.0, gamma=0.99, lr=1e-4):
         self.train_device = device
         self.policy = policy.to(self.train_device)
-        self.optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
+        
+        actor_params = [p for n, p in policy.named_parameters() if 'critic' not in n]
+        critic_params = [p for n, p in policy.named_parameters() if 'critic' in n]
+        
+        self.optimizer = torch.optim.Adam([
+            {'params': actor_params, 'lr': lr},
+            {'params': critic_params, 'lr': 1e-3}
+        ])
 
         self.algo = algo
         self.baseline = baseline
@@ -124,9 +132,7 @@ class Agent(object):
         #   - compute gradients and step the optimizer
         if self.algo == 'reinforce':
             # REINFORCE without baseline
-            returns = discount_rewards(rewards, self.gamma)
-
-            # Normalizing returns improves numerical stability
+            returns = discount_rewards(rewards, self.gamma, done)
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
             policy_loss = -(action_log_probs * returns.detach()).mean()
@@ -134,7 +140,7 @@ class Agent(object):
 
         elif self.algo == 'reinforce_baseline':
             # REINFORCE with constant baseline
-            returns = discount_rewards(rewards, self.gamma)
+            returns = discount_rewards(rewards, self.gamma, done)
 
             # Constant baseline: A_t = G_t - b
             advantages = returns - self.baseline
@@ -144,18 +150,25 @@ class Agent(object):
             loss = policy_loss
 
         elif self.algo == 'actor_critic':
-            # Actor-Critic with one-step TD error
+            # Actor-Critic: Monte Carlo returns with learned value baseline
             values = self.policy.value(states)
 
+            # Compute full episode returns
+            returns = discount_rewards(rewards, self.gamma, done)
+            
+            # CRITICAL FIX: Normalize returns to prevent Critic Loss explosion!
+            # Critic will now predict normalized values (around zero) instead of huge rewards (2000+)
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+            # Advantage = G_t - V(s_t)
             with torch.no_grad():
-                next_values = self.policy.value(next_states)
-                td_target = rewards + self.gamma * next_values * (1.0 - done)
+                advantages = returns - values
+                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-            td_error = td_target - values
+            actor_loss = -(action_log_probs * advantages).mean()
+            critic_loss = F.mse_loss(values, returns.detach())
 
-            actor_loss = -(action_log_probs * td_error.detach()).mean()
-            critic_loss = td_error.pow(2).mean()
-
+            # 0.5 is standard weighting for critic loss
             loss = actor_loss + 0.5 * critic_loss
 
         else:
@@ -167,8 +180,6 @@ class Agent(object):
         self.optimizer.step()
 
         return loss.item()
-
-        return        
 
 
     def get_action(self, state, evaluation=False):

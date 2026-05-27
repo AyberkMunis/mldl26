@@ -20,10 +20,11 @@ def main():
         default="reinforce",
         choices=["reinforce", "reinforce_baseline", "actor_critic"]
     )
-    parser.add_argument("--episodes", type=int, default=5000)
+    parser.add_argument("--episodes", type=int, default=20000)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--baseline", type=float, default=200.0)
+    parser.add_argument("--batch-episodes", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -80,8 +81,12 @@ def main():
             state = next_state
             total_reward += reward
 
-        loss = agent.update_policy()
         episode_rewards.append(total_reward)
+
+        if episode % args.batch_episodes == 0:
+            loss = agent.update_policy()
+        else:
+            loss = None
 
         if total_reward > best_reward:
             best_reward = total_reward
@@ -97,12 +102,13 @@ def main():
 
         if episode % 10 == 0:
             avg_last_10 = np.mean(episode_rewards[-10:])
+            loss_str = f"{loss:8.4f}" if loss is not None else "     N/A"
             print(
                 f"Episode {episode:5d} | "
                 f"Reward: {total_reward:8.2f} | "
                 f"Avg last 10: {avg_last_10:8.2f} | "
                 f"Best: {best_reward:8.2f} | "
-                f"Loss: {loss:8.4f}"
+                f"Loss: {loss_str}"
             )
 
     elapsed = time.time() - start_time
