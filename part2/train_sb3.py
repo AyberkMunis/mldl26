@@ -129,7 +129,7 @@ def main() -> None:
         callback=wandb_callback,
     )
 
-    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
+    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_{SEED}"
     model.save(save_name)
     print(f"Model saved successfully as {save_name}.zip")
 
@@ -142,3 +142,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+    
