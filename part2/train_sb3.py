@@ -1,10 +1,14 @@
 import argparse
+import random
 from collections import deque
 
 import gymnasium as gym
 import numpy as np
+import torch
 import panda_gym  # type: ignore[import-not-found]
 import wandb
+
+SEED = 42
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3 import PPO, SAC, DDPG
 from stable_baselines3.common.monitor import Monitor
@@ -40,10 +44,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+
     args = parse_args()
 
     run_name = args.wandb_run_name or (
-        f"{args.algo}_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k"
+        f"{args.algo}_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_train_{SEED}"
     )
 
     run = wandb.init(
@@ -64,6 +72,7 @@ def main() -> None:
         type=args.env_type,
         reward_type="dense",
     )
+    env.reset(seed=SEED)
     env = RandomizationWrapper(env, mass_range=(0.5, 6.0), mode=args.sampling_strategy)
     env = Monitor(env)
 
@@ -82,6 +91,7 @@ def main() -> None:
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=tensorboard_log,
+            seed=SEED,
         )
         model = PPO("MultiInputPolicy", env, **model_hyperparams)
 
@@ -96,6 +106,7 @@ def main() -> None:
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=tensorboard_log,
+            seed=SEED,
         )
         model = SAC("MultiInputPolicy", env, **model_hyperparams)
 

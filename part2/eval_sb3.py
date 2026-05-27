@@ -1,9 +1,13 @@
 import argparse
 import os
+import random
 
 import gymnasium as gym
 import numpy as np
+import torch
 import panda_gym  # noqa: F401 - required so Panda envs are registered
+
+SEED = 42
 
 
 def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool, env_type: str, algo: str) -> None:
@@ -13,8 +17,13 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
             "Make sure you saved your trained model with model.save(...)."
         )
 
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+
     render_mode = "human" if render else "rgb_array"
     env = gym.make("PandaPush-v3", render_mode=render_mode, type=env_type, reward_type="dense")
+    env.reset(seed=SEED)
     
     if algo == "ppo":
         from stable_baselines3 import PPO
