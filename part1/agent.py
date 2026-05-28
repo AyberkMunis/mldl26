@@ -34,6 +34,7 @@ class Policy(torch.nn.Module):
         self.log_std = torch.nn.Parameter(torch.zeros(self.action_space))
 
 
+
         """
             Critic network
         """
@@ -64,6 +65,7 @@ class Policy(torch.nn.Module):
         log_std = torch.clamp(self.log_std, -5, 1)
         sigma = log_std.exp()
         normal_dist = Normal(action_mean, sigma)
+
 
 
         """
@@ -138,6 +140,9 @@ class Agent(object):
             policy_loss = -(action_log_probs * returns.detach()).mean()
             loss = policy_loss
 
+
+
+
         elif self.algo == 'reinforce_baseline':
             # REINFORCE with constant baseline
             returns = discount_rewards(rewards, self.gamma, done)
@@ -150,6 +155,9 @@ class Agent(object):
             loss = policy_loss
 
         elif self.algo == 'actor_critic':
+            # Deneme 3b: One-Step TD Error + Advantage Normalization
+            # Deneme 3c: GAE (Generalized Advantage Estimation), lambda=0.95
+
             # Actor-Critic: Monte Carlo returns with learned value baseline
             values = self.policy.value(states)
 
@@ -171,6 +179,7 @@ class Agent(object):
             # 0.5 is standard weighting for critic loss
             loss = actor_loss + 0.5 * critic_loss
 
+
         else:
             raise ValueError(f"Unknown algorithm: {self.algo}")
 
@@ -179,6 +188,8 @@ class Agent(object):
         torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
         self.optimizer.step()
 
+        self.last_actor_loss = actor_loss.item() if 'actor_loss' in locals() else policy_loss.item()
+        self.last_critic_loss = critic_loss.item() if 'critic_loss' in locals() else 0.0
         return loss.item()
 
 

@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import wandb
 
+
 from agent import Policy,Agent
 
 
@@ -142,6 +143,9 @@ def main():
                     "loss": loss if loss is not None else 0.0,
                     "episode_length": episode_length,
                     "log_std_mean": policy.log_std.mean().item(),
+                    "actor_loss": getattr(agent, "last_actor_loss", 0.0),
+                    "critic_loss": getattr(agent, "last_critic_loss", 0.0),
+
                 })
 
     elapsed = time.time() - start_time
