@@ -8,6 +8,7 @@ import os
 import time
 import numpy as np
 import torch
+import wandb
 
 from agent import Policy,Agent
 
@@ -26,7 +27,26 @@ def main():
     parser.add_argument("--baseline", type=float, default=200.0)
     parser.add_argument("--batch-episodes", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--wandb", action="store_true")
+    parser.add_argument("--project", type=str, default="FAIML_RL_Part1")
+    parser.add_argument("--run-name", type=str, default=None)
     args = parser.parse_args()
+
+    if args.wandb:
+        wandb.init(
+            project=args.project,
+            name=args.run_name if args.run_name is not None else f"{args.algo}_seed{args.seed}",
+            config={
+                "algo": args.algo,
+                "episodes": args.episodes,
+                "gamma": args.gamma,
+                "lr": args.lr,
+                "baseline": args.baseline,
+                "batch_episodes": args.batch_episodes,
+                "seed": args.seed,
+                "env": "Hopper-v4",
+            },
+        )
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -61,6 +81,7 @@ def main():
         state, _ = env.reset(seed=args.seed + episode)
         done = False
         total_reward = 0.0
+        episode_length = 0
 
         while not done:
             action, action_log_prob = agent.get_action(state, evaluation=False)
@@ -80,6 +101,7 @@ def main():
 
             state = next_state
             total_reward += reward
+            episode_length += 1
 
         episode_rewards.append(total_reward)
 
@@ -108,8 +130,19 @@ def main():
                 f"Reward: {total_reward:8.2f} | "
                 f"Avg last 10: {avg_last_10:8.2f} | "
                 f"Best: {best_reward:8.2f} | "
-                f"Loss: {loss_str}"
+                f"Loss: {loss_str}",
+
             )
+            if args.wandb:
+                wandb.log({
+                    "episode": episode,
+                    "reward": total_reward,
+                    "avg_last_10_reward": avg_last_10,
+                    "best_reward": best_reward,
+                    "loss": loss if loss is not None else 0.0,
+                    "episode_length": episode_length,
+                    "log_std_mean": policy.log_std.mean().item(),
+                })
 
     elapsed = time.time() - start_time
     print("\nTraining finished.")
@@ -118,6 +151,8 @@ def main():
     print(f"Training time: {elapsed:.2f} seconds")
 
     env.close()
+    if args.wandb:
+        wandb.finish()
 
 if __name__ == '__main__':
     main()
