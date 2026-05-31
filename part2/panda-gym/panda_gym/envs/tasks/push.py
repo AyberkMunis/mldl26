@@ -80,8 +80,8 @@ class Push(Task):
     def _sample_goal(self) -> np.ndarray:
         """Randomize goal."""
         goal = np.array([0.0, 0.0, self.object_size / 2])  # z offset for the cube center
-        #noise = self.np_random.uniform(self.goal_range_low, self.goal_range_high)
-        #goal += noise
+        noise = self.np_random.uniform(self.goal_range_low, self.goal_range_high)
+        goal += noise
         return goal
 
     def _sample_object(self) -> np.ndarray:

@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import random
 
@@ -7,7 +8,15 @@ import numpy as np
 import torch
 import panda_gym  # noqa: F401 - required so Panda envs are registered
 
-SEED = 42
+SEED = 200
+
+
+def set_seed(seed: int) -> None:
+    """Seed all RNGs so evaluation is reproducible across runs/models."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool, env_type: str, algo: str) -> None:
@@ -17,19 +26,33 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
             "Make sure you saved your trained model with model.save(...)."
         )
 
-    random.seed(SEED)
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
+    # Global determinism for the whole evaluation run.
+    set_seed(SEED)
+
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
     render_mode = "human" if render else "rgb_array"
-    env = gym.make("PandaPush-v3", render_mode=render_mode, type=env_type, reward_type="dense")
-    env.reset(seed=SEED)
-    
+    base_env = gym.make("PandaPush-v3", render_mode=render_mode, type=env_type, reward_type="dense")
+    base_env.action_space.seed(SEED)
+
+    use_vecenv = False
+
     if algo == "ppo":
         from stable_baselines3 import PPO
-        model = PPO.load(model_path)
+        vecnorm_path = model_path.replace(".zip", "_vecnormalize.pkl")
+        env = DummyVecEnv([lambda: base_env])
+        if os.path.exists(vecnorm_path):
+            env = VecNormalize.load(vecnorm_path, env)
+            env.training = False
+            env.norm_reward = False
+            use_vecenv = True
+            print(f"VecNormalize stats loaded from {vecnorm_path}")
+        else:
+            print(f"Warning: {vecnorm_path} not found, running without VecNormalize.")
+        model = PPO.load(model_path, env=env)
     elif algo == "sac":
         from stable_baselines3 import SAC
+        env = base_env
         model = SAC.load(model_path)
     else:
         raise ValueError(f"Unknown algorithm: {algo}")
@@ -39,34 +62,46 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
     successful_steps = []
 
     for episode in range(1, n_episodes + 1):
-        obs, info = env.reset()
-        terminated = False
-        truncated = False
+        if use_vecenv:
+            obs, _ = env.reset(seed=[SEED] if episode == 1 else None)
+        else:
+            obs, _ = env.reset(seed=SEED if episode == 1 else None)
+
+        done = False
         episode_return = 0.0
         step_count = 0
 
-        while not (terminated or truncated):
+        while not done:
             action, _ = model.predict(obs, deterministic=deterministic)
-            obs, reward, terminated, truncated, info = env.step(action)
-            episode_return += float(reward)
-            step_count += 1
-            if render:
-                import time
-                time.sleep(0.05)  # Slow down the visualization to calmly observe robot dynamics
 
+            if use_vecenv:
+                obs, reward, terminated, info = env.step(action)
+                done = bool(terminated[0])
+                episode_return += float(reward[0])
+                step_count += 1
+                step_info = info[0]
+            else:
+                obs, reward, terminated, truncated, info = env.step(action)
+                done = terminated or truncated
+                episode_return += float(reward)
+                step_count += 1
+                if render:
+                    import time
+                    time.sleep(0.05)
+                step_info = info
 
         episode_returns.append(episode_return)
 
-        is_success = False
-        if isinstance(info, dict) and "is_success" in info:
-            is_success = bool(info["is_success"])
-            successes.append(float(is_success))
+        if "is_success" not in step_info:
+            raise KeyError("Expected 'is_success' in info dict but it was missing.")
+        is_success = bool(step_info["is_success"])
+        successes.append(float(is_success))
 
         if is_success:
             successful_steps.append(step_count)
             status_str = f"SUCCESS (in {step_count} steps)"
         else:
-            status_str = f"FAILED (limit {step_count} steps)"
+            status_str = "FAILED"
 
         print(f"Episode {episode:03d} | return = {episode_return:.3f} | Result: {status_str}")
 
@@ -74,7 +109,10 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     returns = np.array(episode_returns, dtype=np.float32)
     print("\n=== Evaluation summary ===")
-    print(f"Episodes: {n_episodes}")
+    print(f"Algorithm:   {algo.upper()}")
+    print(f"Env type:    {env_type}")
+    print(f"Eval seed:   {SEED}")
+    print(f"Episodes:    {n_episodes}")
     print(f"Mean return: {returns.mean():.3f}")
     print(f"Std return:  {returns.std():.3f}")
     print(f"Min return:  {returns.min():.3f}")
@@ -82,11 +120,13 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     if successes:
         success_rate = float(np.mean(successes))
-        print(f"Success rate (Accuracy): {success_rate:.2%}")
+        # Standard error of a Bernoulli proportion: sqrt(p(1-p)/n).
+        # Reported so small differences aren't over-interpreted at n=50.
+        se = math.sqrt(success_rate * (1.0 - success_rate) / n_episodes)
+        print(f"Success rate (Accuracy): {success_rate:.2%}  (+/- {se:.2%} SE)")
 
     if successful_steps:
         print(f"Average steps to success: {np.mean(successful_steps):.1f} steps")
-
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,10 +145,10 @@ def parse_args() -> argparse.Namespace:
         help="Algorithm to load (ppo or sac)",
     )
     parser.add_argument(
-        "--episodes", 
-        type=int, 
-        default=500, 
-        help="Number of eval episodes"
+        "--episodes",
+        type=int,
+        default=50,
+        help="Number of eval episodes",
     )
     parser.add_argument(
         "--stochastic",
@@ -139,4 +179,3 @@ if __name__ == "__main__":
         env_type=args.env_type,
         algo=args.algo,
     )
-

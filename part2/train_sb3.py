@@ -1,20 +1,21 @@
+
 import argparse
 import random
 from collections import deque
-
+ 
 import gymnasium as gym
 import numpy as np
 import torch
 import panda_gym  # type: ignore[import-not-found]
 import wandb
-
-SEED = 42
+ 
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3 import PPO, SAC, DDPG
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from rand_wrapper import RandomizationWrapper
-
-
+ 
+ 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train PPO or SAC on PandaPush-v3")
     parser.add_argument("--algo", type=str, default="ppo", choices=["ppo", "sac"])
@@ -29,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timesteps", type=int, default=500_000)
     parser.add_argument("--log-interval", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=42)
     # --- wandb args ---
     parser.add_argument("--wandb-project", type=str, default="MLDL")
     parser.add_argument("--wandb-entity", type=str, default=None)
@@ -41,19 +43,20 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--wandb-tags", type=str, nargs="*", default=None)
     return parser.parse_args()
-
-
+ 
+ 
 def main() -> None:
-    random.seed(SEED)
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
-
     args = parse_args()
-
+    seed = args.seed
+ 
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+ 
     run_name = args.wandb_run_name or (
-        f"{args.algo}_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_train_{SEED}"
+        f"{args.algo}_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_train_{seed}"
     )
-
+ 
     run = wandb.init(
         project=args.wandb_project,
         entity=args.wandb_entity,
@@ -65,20 +68,37 @@ def main() -> None:
         monitor_gym=False,
         save_code=True,
     )
-
-    env = gym.make(
-        "PandaPush-v3",
-        render_mode="rgb_array",
-        type=args.env_type,
-        reward_type="dense",
-    )
-    env.reset(seed=SEED)
-    env = RandomizationWrapper(env, mass_range=(0.5, 6.0), mode=args.sampling_strategy)
-    env = Monitor(env)
-
+ 
+    def make_env():
+        env = gym.make(
+            "PandaPush-v3",
+            render_mode="rgb_array",
+            type=args.env_type,
+            reward_type="dense",
+        )
+        env.reset(seed=seed)
+        env = RandomizationWrapper(env, mass_range=(0.5, 6.0), mode=args.sampling_strategy)
+        env = Monitor(env)
+        return env
+ 
     tensorboard_log = f"runs/{run.id}"
-
+ 
+    # VecNormalize is applied ONLY to PPO. PPO is highly sensitive to obs/reward
+    # scaling and collapses without it. SAC is left raw: reward normalization with
+    # an off-policy replay buffer mixes stale statistics and is not standard.
+    use_vecnormalize = args.algo == "ppo"
+ 
     if args.algo == "ppo":
+        env = DummyVecEnv([make_env])
+        env = VecNormalize(
+            env,
+            norm_obs=True,
+            norm_reward=True,
+            clip_obs=10.0,
+            clip_reward=10.0,
+            gamma=0.99,
+        )
+ 
         policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
         model_hyperparams = dict(
             learning_rate=3e-4,
@@ -91,11 +111,13 @@ def main() -> None:
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=tensorboard_log,
-            seed=SEED,
+            seed=seed,
         )
         model = PPO("MultiInputPolicy", env, **model_hyperparams)
-
+ 
     elif args.algo == "sac":
+        env = make_env()
+ 
         policy_kwargs = dict(net_arch=[512, 512])
         model_hyperparams = dict(
             learning_rate=3e-4,
@@ -106,41 +128,49 @@ def main() -> None:
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=tensorboard_log,
-            seed=SEED,
+            seed=seed,
         )
         model = SAC("MultiInputPolicy", env, **model_hyperparams)
-
+ 
     else:
         raise ValueError(f"Unknown algorithm: {args.algo}")
-
+ 
     # >>> Sadece modele verilen hiperparametreleri wandb'ye yaz <
     wandb.config.update({"model": model_hyperparams}, allow_val_change=True)
-
+ 
     wandb_callback = WandbCallback(
         model_save_path=f"models/{run.id}",
         model_save_freq=50_000,
         gradient_save_freq=10_000,
         verbose=2,
     )
-
+ 
     model.learn(
         total_timesteps=args.timesteps,
         log_interval=args.log_interval,
         callback=wandb_callback,
     )
-
-    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_{SEED}"
+ 
+    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_{seed}"
     model.save(save_name)
     print(f"Model saved successfully as {save_name}.zip")
-
+ 
     artifact = wandb.Artifact(name=save_name, type="model")
     artifact.add_file(f"{save_name}.zip")
+ 
+    # Save VecNormalize statistics so evaluation can reproduce the same
+    # obs scaling. Without this file, PPO will look broken at eval time.
+    if use_vecnormalize:
+        vecnorm_path = f"{save_name}_vecnormalize.pkl"
+        env.save(vecnorm_path)
+        print(f"VecNormalize stats saved as {vecnorm_path}")
+        artifact.add_file(vecnorm_path)
+ 
     run.log_artifact(artifact)
-
+ 
     run.finish()
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
-
-    
+ 
