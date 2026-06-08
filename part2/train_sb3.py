@@ -120,7 +120,7 @@ def main() -> None:
           learning_rate=3e-4,        # 3e-4'ten düşürüldü: Q kararsızlığını azaltır
           buffer_size=1_000_000,     # Colab'da OOM olursa 300_000'e çek
           batch_size=256,
-          tau=0.005,
+          tau=0.001,
           gamma=0.99,
           learning_starts=10_000,    # erken Q patlamasının ana ilacı
           train_freq=1,
@@ -142,7 +142,7 @@ def main() -> None:
     wandb_callback = WandbCallback(
         model_save_path=f"models/{run.id}",
         model_save_freq=50_000,
-        gradient_save_freq=10_000,
+        gradient_save_freq=0,
         verbose=2,
     )
  
