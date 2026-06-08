@@ -63,7 +63,8 @@ def evaluate(model_path: str, n_episodes: int, deterministic: bool, render: bool
 
     for episode in range(1, n_episodes + 1):
         if use_vecenv:
-            obs, _ = env.reset(seed=[SEED] if episode == 1 else None)
+            reset_out = env.reset()
+            obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
         else:
             obs, _ = env.reset(seed=SEED if episode == 1 else None)
 
