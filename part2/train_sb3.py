@@ -8,7 +8,8 @@ import numpy as np
 import torch
 import panda_gym  # type: ignore[import-not-found]
 import wandb
- 
+import os
+import shutil
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3 import PPO, SAC, DDPG
 from stable_baselines3.common.monitor import Monitor
@@ -116,7 +117,7 @@ def main() -> None:
       policy_kwargs = dict(net_arch=[512, 512])
 
       model_hyperparams = dict(
-          learning_rate=1e-4,        # 3e-4'ten düşürüldü: Q kararsızlığını azaltır
+          learning_rate=3e-4,        # 3e-4'ten düşürüldü: Q kararsızlığını azaltır
           buffer_size=1_000_000,     # Colab'da OOM olursa 300_000'e çek
           batch_size=256,
           tau=0.005,
