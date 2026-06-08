@@ -14,6 +14,8 @@ from stable_baselines3 import PPO, SAC, DDPG
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from rand_wrapper import RandomizationWrapper
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
  
  
 def parse_args() -> argparse.Namespace:
@@ -89,23 +91,25 @@ def main() -> None:
  
     if args.algo == "ppo":
  
+        n_envs = 8
+        env = DummyVecEnv([make_env for _ in range(n_envs)])
+
         policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
         model_hyperparams = dict(
             learning_rate=3e-4,
             n_steps=2048,
-            batch_size=128,
+            batch_size=512,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
+            ent_coef=0.01,
             policy_kwargs=policy_kwargs,
             verbose=1,
             tensorboard_log=tensorboard_log,
             seed=seed,
-            device="cuda"
         )
         model = PPO("MultiInputPolicy", env, **model_hyperparams)
- 
     elif args.algo == "sac":
       env = make_env()
  
