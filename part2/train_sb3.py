@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-interval", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     # --- wandb args ---
-    parser.add_argument("--wandb-project", type=str, default="MLDL")
+    parser.add_argument("--wandb-project", type=str, default="part2")
     parser.add_argument("--wandb-entity", type=str, default=None)
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument(
@@ -86,18 +86,8 @@ def main() -> None:
     # VecNormalize is applied ONLY to PPO. PPO is highly sensitive to obs/reward
     # scaling and collapses without it. SAC is left raw: reward normalization with
     # an off-policy replay buffer mixes stale statistics and is not standard.
-    use_vecnormalize = args.algo == "ppo"
  
     if args.algo == "ppo":
-        env = DummyVecEnv([make_env])
-        env = VecNormalize(
-            env,
-            norm_obs=True,
-            norm_reward=True,
-            clip_obs=10.0,
-            clip_reward=10.0,
-            gamma=0.99,
-        )
  
         policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
         model_hyperparams = dict(
@@ -112,25 +102,31 @@ def main() -> None:
             verbose=1,
             tensorboard_log=tensorboard_log,
             seed=seed,
+            device="cuda"
         )
         model = PPO("MultiInputPolicy", env, **model_hyperparams)
  
     elif args.algo == "sac":
-        env = make_env()
+      env = make_env()
  
-        policy_kwargs = dict(net_arch=[512, 512])
-        model_hyperparams = dict(
-            learning_rate=3e-4,
-            buffer_size=1_000_000,
-            batch_size=256,
-            tau=0.005,
-            gamma=0.99,
-            policy_kwargs=policy_kwargs,
-            verbose=1,
-            tensorboard_log=tensorboard_log,
-            seed=seed,
-        )
-        model = SAC("MultiInputPolicy", env, **model_hyperparams)
+      policy_kwargs = dict(net_arch=[512, 512])
+
+      model_hyperparams = dict(
+          learning_rate=1e-4,        # 3e-4'ten düşürüldü: Q kararsızlığını azaltır
+          buffer_size=1_000_000,     # Colab'da OOM olursa 300_000'e çek
+          batch_size=256,
+          tau=0.005,
+          gamma=0.99,
+          learning_starts=10_000,    # erken Q patlamasının ana ilacı
+          train_freq=1,
+          gradient_steps=1,
+          policy_kwargs=policy_kwargs,
+          verbose=1,
+          tensorboard_log=tensorboard_log,
+          seed=seed,
+          device="cuda"
+      )
+      model = SAC("MultiInputPolicy", env, **model_hyperparams)
  
     else:
         raise ValueError(f"Unknown algorithm: {args.algo}")
@@ -151,24 +147,24 @@ def main() -> None:
         callback=wandb_callback,
     )
  
-    save_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_{seed}"
-    model.save(save_name)
-    print(f"Model saved successfully as {save_name}.zip")
- 
-    artifact = wandb.Artifact(name=save_name, type="model")
-    artifact.add_file(f"{save_name}.zip")
- 
-    # Save VecNormalize statistics so evaluation can reproduce the same
-    # obs scaling. Without this file, PPO will look broken at eval time.
-    if use_vecnormalize:
-        vecnorm_path = f"{save_name}_vecnormalize.pkl"
-        env.save(vecnorm_path)
-        print(f"VecNormalize stats saved as {vecnorm_path}")
-        artifact.add_file(vecnorm_path)
- 
+    clean_name = f"{args.algo}_push_{args.sampling_strategy}_{args.env_type}_{args.timesteps // 1000}k_{seed}"
+
+    # 1) Önce hızlı/güvenilir lokal diske kaydet
+    local_path = f"/content/{clean_name}.zip"
+    model.save(local_path)
+    print(f"Model saved locally as {local_path}")
+
+    # 2) wandb artifact'ı LOKAL dosyadan oluştur (isimde slash yok)
+    artifact = wandb.Artifact(name=clean_name, type="model")
+    artifact.add_file(local_path)
+
     run.log_artifact(artifact)
- 
-    run.finish()
+
+    # 3) Drive'a kopyala (klasörü garanti et)
+    drive_dir = "/content/drive/MyDrive/Mldl_project/part2"
+    os.makedirs(drive_dir, exist_ok=True)
+    shutil.copy(local_path, f"{drive_dir}/{clean_name}.zip")
+    print(f"Copied to Drive: {drive_dir}/{clean_name}.zip")
  
  
 if __name__ == "__main__":
