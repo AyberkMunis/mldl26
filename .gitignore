@@ -27,3 +27,13 @@ logs/
 
 # Jupyter / Colab
 .ipynb_checkpoints/
+ppo/ppo_push_udr_source_500k_42_vecnormalize.pkl
+ppo/ppo_old/ppo_push_none_source_500k_42_vecnormalize.pkl
+models/ppo/ppo_push_udr_source_500k_42_vecnormalize.pkl
+models/ppo/ppo_push_none_target_500k_100_vecnormalize.pkl
+models/ppo/ppo_push_none_target_500k_70_vecnormalize.pkl
+models/ppo/ppo_push_none_target_500k_42_vecnormalize.pkl
+models/ppo/ppo_push_none_source_500k_100_vecnormalize.pkl
+models/ppo/ppo_push_none_source_500k_70_vecnormalize.pkl
+models/ppo/ppo_push_none_source_500k_42_vecnormalize.pkl
+new.py
