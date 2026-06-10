@@ -23,22 +23,16 @@ class Policy(torch.nn.Module):
         self.hidden = 256
         self.tanh = torch.nn.Tanh()
 
-        """
-            Actor network
-        """
+      
         self.fc1_actor = torch.nn.Linear(state_space, self.hidden)
         self.fc2_actor = torch.nn.Linear(self.hidden, self.hidden)
         self.fc3_actor_mean = torch.nn.Linear(self.hidden, action_space)
         
-        # Learned standard deviation for exploration at training time 
         self.log_std = torch.nn.Parameter(torch.zeros(self.action_space))
 
 
 
-        """
-            Critic network
-        """
-        # TASK 3: critic network for actor-critic algorithm
+       
         self.fc1_critic = torch.nn.Linear(state_space, self.hidden)
         self.fc2_critic = torch.nn.Linear(self.hidden, self.hidden)
         self.fc3_critic_value = torch.nn.Linear(self.hidden, 1)
@@ -55,9 +49,7 @@ class Policy(torch.nn.Module):
 
 
     def forward(self, x):
-        """
-            Actor
-        """
+       
         x_actor = self.tanh(self.fc1_actor(x))
         x_actor = self.tanh(self.fc2_actor(x_actor))
         action_mean = self.tanh(self.fc3_actor_mean(x_actor))
@@ -68,18 +60,11 @@ class Policy(torch.nn.Module):
 
 
 
-        """
-            Critic
-        """
-        # TASK 3: forward in the critic network
-
         
         return normal_dist
 
     def value(self, x):
-        """
-        Critic forward pass: estimates V(s)
-        """
+     
         x_critic = self.tanh(self.fc1_critic(x))
         x_critic = self.tanh(self.fc2_critic(x_critic))
         state_value = self.fc3_critic_value(x_critic).squeeze(-1)
@@ -118,22 +103,8 @@ class Agent(object):
 
         self.states, self.next_states, self.action_log_probs, self.rewards, self.done = [], [], [], [], []
 
-        #
-        # TASK 2:
-        #   - compute discounted returns
-        #   - compute policy gradient loss function given actions and returns
-        #   - compute gradients and step the optimizer
-        #
-
-
-        #
-        # TASK 3:
-        #   - compute boostrapped discounted return estimates
-        #   - compute advantage terms
-        #   - compute actor loss and critic loss
-        #   - compute gradients and step the optimizer
+        
         if self.algo == 'reinforce':
-            # REINFORCE without baseline
             returns = discount_rewards(rewards, self.gamma, done)
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
@@ -144,10 +115,8 @@ class Agent(object):
 
 
         elif self.algo == 'reinforce_baseline':
-            # REINFORCE with constant baseline
             returns = discount_rewards(rewards, self.gamma, done)
 
-            # Constant baseline: A_t = G_t - b
             advantages = returns - self.baseline
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
@@ -155,20 +124,13 @@ class Agent(object):
             loss = policy_loss
 
         elif self.algo == 'actor_critic':
-            # Deneme 3b: One-Step TD Error + Advantage Normalization
-            # Deneme 3c: GAE (Generalized Advantage Estimation), lambda=0.95
-
-            # Actor-Critic: Monte Carlo returns with learned value baseline
+            
             values = self.policy.value(states)
 
-            # Compute full episode returns
             returns = discount_rewards(rewards, self.gamma, done)
             
-            # CRITICAL FIX: Normalize returns to prevent Critic Loss explosion!
-            # Critic will now predict normalized values (around zero) instead of huge rewards (2000+)
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
-            # Advantage = G_t - V(s_t)
             with torch.no_grad():
                 advantages = returns - values
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -176,7 +138,6 @@ class Agent(object):
             actor_loss = -(action_log_probs * advantages).mean()
             critic_loss = F.mse_loss(values, returns.detach())
 
-            # 0.5 is standard weighting for critic loss
             loss = actor_loss + 0.5 * critic_loss
 
 
@@ -194,19 +155,17 @@ class Agent(object):
 
 
     def get_action(self, state, evaluation=False):
-        """ state -> action (3-d), action_log_densities """
         x = torch.from_numpy(state).float().to(self.train_device)
 
         normal_dist = self.policy(x)
 
-        if evaluation:  # Return mean
+        if evaluation: 
             action= torch.clamp(normal_dist.mean, -1.0,1.0)
             return action, None
 
-        else:   # Sample from the distribution
+        else:  
             action = normal_dist.sample()
 
-            # Compute Log probability of the action [ log(p(a[0] AND a[1] AND a[2])) = log(p(a[0])*p(a[1])*p(a[2])) = log(p(a[0])) + log(p(a[1])) + log(p(a[2])) ]
             action_log_prob = normal_dist.log_prob(action).sum()
             action=torch.clamp(action,-1,1)
 

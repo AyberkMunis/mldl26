@@ -1,7 +1,3 @@
-"""Sample script for training a control policy on the Hopper environment
-
-    Here you will implement the training loop for REINFORCE and Actor-Critic
-"""
 import gymnasium as gym
 import argparse
 import os
@@ -53,8 +49,8 @@ def main():
     torch.manual_seed(args.seed)
     env = gym.make('Hopper-v4')
 
-    print('State space:', env.observation_space)  # state-space
-    print('Action space:', env.action_space)  # action-space
+    print('State space:', env.observation_space)  
+    print('Action space:', env.action_space)  
     env.action_space.seed(args.seed)
     env.observation_space.seed(args.seed)
 
@@ -77,7 +73,6 @@ def main():
     episode_rewards = []
     start_time = time.time()
 
-    #TODO: implement training loop for REINFORCE and Actor-Critic using the agent defined in agent.py
     for episode in range(1, args.episodes + 1):
         state, _ = env.reset(seed=args.seed + episode)
         done = False

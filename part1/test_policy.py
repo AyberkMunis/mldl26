@@ -11,7 +11,6 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    # Ortamı görselleştirme (render) moduyla oluşturuyoruz
     env = gym.make('Hopper-v4', render_mode='human')
     
     state_space = env.observation_space.shape[0]
@@ -19,12 +18,11 @@ def main():
     
     policy = Policy(state_space, action_space)
     
-    # Kaydedilen modeli yüklüyoruz
     checkpoint = torch.load(args.checkpoint, weights_only=False)
     policy.load_state_dict(checkpoint["policy"])
-    print(f"\nYüklenen Model: {checkpoint['algo']}")
-    print(f"Eğitim sırasında kaydedildiği episode: {checkpoint['episode']}")
-    print(f"Eğitim sırasında ulaştığı en iyi ödül: {checkpoint['reward']:.2f}\n")
+    print(f"Loaded Model: {checkpoint['algo']}")
+    print(f"Episode: {checkpoint['episode']}")
+    print(f"Reward: {checkpoint['reward']:.2f}\n")
 
     agent = Agent(policy=policy, device='cpu')
 
@@ -34,7 +32,6 @@ def main():
         total_reward = 0.0
 
         while not done:
-            # Test sırasında rastgeleliği kapatıp doğrudan modelin öğrendiği ana davranışı (mean) alıyoruz (evaluation=True)
             action, _ = agent.get_action(state, evaluation=True)
             
             state, reward, terminated, truncated, _ = env.step(action.detach().cpu().numpy())
@@ -42,7 +39,7 @@ def main():
             total_reward += reward
             env.render()
             
-        print(f"Test Episode {episode} - Toplam Ödül: {total_reward:.2f}")
+        print(f"Test Episode {episode} - Total Reward: {total_reward:.2f}")
 
     env.close()
 

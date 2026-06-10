@@ -1,13 +1,3 @@
-"""Test a random policy on the Gym Hopper environment
-
-    Play around with this code to get familiar with the
-    Hopper environment.
-
-    For example, what happens if you don't reset the environment
-    even after the episode is over?
-    When exactly is the episode over?
-    What is an action here?
-"""
 import gymnasium as gym
 
 def main():
@@ -17,8 +7,8 @@ def main():
         env = gym.make('Hopper-v4', render_mode='human')
     else:
         env = gym.make('Hopper-v4', render_mode='rgb_array')
-    print('State space:', env.observation_space)  # state-space
-    print('Action space:', env.action_space)  # action-space
+    print('State space:', env.observation_space)  
+    print('Action space:', env.action_space)  
 
     model = env.unwrapped.model
 
@@ -33,12 +23,12 @@ def main():
 
     for ep in range(n_episodes):  
         done = False
-        state, info = env.reset()  # Reset environment to initial state
+        state, info = env.reset()  
 
-        while not done:  # Until the episode is over
-            action = env.action_space.sample()  # Sample random action
+        while not done:  
+            action = env.action_space.sample()  
 
-            state, reward, terminated, truncated, _ = env.step(action)  # Step the simulator to the next timestep
+            state, reward, terminated, truncated, _ = env.step(action)  
             done = terminated or truncated
 
             if render:
