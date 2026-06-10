@@ -37,3 +37,32 @@ models/ppo/ppo_push_none_source_500k_100_vecnormalize.pkl
 models/ppo/ppo_push_none_source_500k_70_vecnormalize.pkl
 models/ppo/ppo_push_none_source_500k_42_vecnormalize.pkl
 new.py
+batch_eval.py
+csvs.py
+differejt_masses.py
+ppo/ppo_old/ppo_push_udr_source_500k_42_vecnormalize.pkl
+results/diff_mass_150k.xlsx
+results/diff_mass_500k.xlsx
+results/ppo_500_2.xlsx
+results/ppo_500.xlsx
+results/sac_150.xlsx
+results/sac_500.xlsx
+results/sac_large.xlsx
+results/sac_narrow.xlsx
+results/final results/~$udr_ranges_170k_aggregated.xlsx
+results/final results/42.log
+results/final results/70.log
+results/final results/100.log
+results/final results/170k42.log
+results/final results/170k70.log
+results/final results/fig_adr_evolution_500k.png
+results/final results/fig_training_curves.png
+results/final results/mass_sweep_seed_aggregated.xlsx
+results/final results/plot_all.py
+results/final results/sac_150_seed_aggregated.xlsx
+results/final results/sac_adr_source_500k_train_70.csv
+results/final results/sac_none_source_500k_train_70.csv
+results/final results/sac_none_target_500k_train_70.csv
+results/final results/sac_ppo_seed_aggregated.xlsx
+results/final results/sac_udr_source_500k_train_70.csv
+results/final results/udr_ranges_170k_aggregated.xlsx
