@@ -27,6 +27,8 @@ logs/
 
 # Jupyter / Colab
 .ipynb_checkpoints/
+/Users/ayberkmunis/Desktop/okul/mldl/mldl26/ppo/ppo_push_none_source_500k_42_vecnormalize.pkl
+/Users/ayberkmunis/Desktop/okul/mldl/mldl26/ppo
 ppo/ppo_push_udr_source_500k_42_vecnormalize.pkl
 ppo/ppo_old/ppo_push_none_source_500k_42_vecnormalize.pkl
 models/ppo/ppo_push_udr_source_500k_42_vecnormalize.pkl
